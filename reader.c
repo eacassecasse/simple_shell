@@ -13,7 +13,7 @@
 void readIn(char **buf)
 {
 	size_t n = 100;
-	int i = 0;
+	
 	*buf = malloc(sizeof(char) * n);
 
 	if (!(*buf))

@@ -22,13 +22,15 @@ int main(void)
 		int exitFlag = 0;
 
 		do {
+			char *in, **args;
+
 			_puts("$ ");
 
-			char *in = NULL;
+			in = NULL;
 
 			readIn(&in);
 
-			char **args = parseLine(in);
+			args = parseLine(in);
 
 			if (_strcmp(args[0], "exit") == 0)
 				exit(0);

@@ -65,7 +65,6 @@ char **parser(char *str, char *delim)
 char **parseSeq(char *line)
 {
 	char *delim = ";\n";
-	size_t n = 0;
 	char **argv = NULL;
 
 	argv = parser(line, delim);
@@ -87,7 +86,6 @@ char **parseSeq(char *line)
 char **parsePipe(char *cmd)
 {
 	char *delim = "|\n";
-	size_t n = 0;
 	char **argv = NULL;
 
 	argv = parser(cmd, delim);
@@ -109,7 +107,6 @@ char **parsePipe(char *cmd)
 char **parseLine(char *cmd)
 {
 	char *delim = " \n";
-	size_t n = 0;
 	char **argv = NULL;
 
 	argv = parser(cmd, delim);
