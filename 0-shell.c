@@ -14,35 +14,25 @@
  */
 int main(void)
 {
+	static char buf[MAXARGS];
 
-	pid_t pid = forkProcess();
-
-	if (pid == 0)
+	while (getcmd(buf, sizeof(buf)) >= 0)
 	{
-		int exitFlag = 0;
+		if (buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' ')
+		{
+			buf[_strlen(buf) - 1] = 0;
 
-		do {
-			char *in, **args;
+			if (chdir(buf + 3) < 0)
+				error("./shell");
 
-			_puts("$ ");
+			continue;
+		}
 
-			in = NULL;
+		if (forkProcess() == 0)
+			runcmd(parsecmd(buf));
 
-			readIn(&in);
-
-			args = parseLine(in);
-
-			if (_strcmp(args[0], "exit") == 0)
-				exit(0);
-
-			runCmd(args[0], args);
-
-			free(in);
-
-		} while (exitFlag == 0);
+		wait(NULL);
 	}
 
-	wait(NULL);
-
-	return (0);
+	exit(0);
 }

@@ -20,12 +20,17 @@ void error(const char *msg)
  *
  * Return: The PID of the new created process
  */
-pid_t forkProcess(void)
+int forkProcess(void)
 {
-	pid_t pid = fork();
+	int pid;
 
-	if (pid < 0)
+	pid = fork();
+
+	if (pid == -1)
+	{
 		error("It was unable to fork a child process");
+		exit(1);
+	}
 
 	return (pid);
 }
