@@ -1,192 +1,86 @@
-#include <stdio.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <stdlib.h>
-#include <string.h>
 #include "main.h"
 
-
 /**
- * parsepipe - Custom Function
- * @ps: pointer to the string
- * @es: pointer to somewhere in the buffer
+ * is_cmd - determines if a file is an executable command
+ * @info: the info struct
+ * @path: path to the file
  *
- * Description: Parses a buffer containing shell
- *		commands to find pipes
- * Return: An command structure
+ * Return: 1 if true, 0 otherwise
  */
-struct cmd *parsepipe(char **ps, char *es)
+int is_cmd(info_t *info, char *path)
 {
-	struct cmd *cmd;
+	struct stat st;
 
-	cmd = parseexec(ps, es);
+	(void)info;
+	if (!path || stat(path, &st))
+		return (0);
 
-	if (peek(ps, es, "|"))
+	if (st.st_mode & S_IFREG)
 	{
-		gettoken(ps, es, 0, 0);
-		cmd = pipecmd(cmd, parsepipe(ps, es));
+		return (1);
 	}
-
-	return (cmd);
+	return (0);
 }
 
 /**
- * parseline - Custom Function
- * @ps: pointer to the string
- * @es: pointer to somewhere in the buffer
+ * dup_chars - duplicates characters
+ * @pathstr: the PATH string
+ * @start: starting index
+ * @stop: stopping index
  *
- * Description: Parses a buffer containing shell
- *		commands to find sequences and/or
- *		background operations
- * Return: An command structure
+ * Return: pointer to new buffer
  */
-struct cmd *parseline(char **ps, char *es)
+char *dup_chars(char *pathstr, int start, int stop)
 {
-	struct cmd *cmd;
+	static char buf[1024];
+	int i = 0, k = 0;
 
-	cmd = parsepipe(ps, es);
-
-	if (peek(ps, es, ";"))
-	{
-		gettoken(ps, es, 0, 0);
-		cmd = listcmd(cmd, parseline(ps, es));
-	}
-
-	return (cmd);
+	for (k = 0, i = start; i < stop; i++)
+		if (pathstr[i] != ':')
+			buf[k++] = pathstr[i];
+	buf[k] = 0;
+	return (buf);
 }
 
 /**
- * parseblock - Custom Function
- * @ps: pointer to the string
- * @es: pointer to somewhere in the buffer
+ * find_path - finds this cmd in the PATH string
+ * @info: the info struct
+ * @pathstr: the PATH string
+ * @cmd: the cmd to find
  *
- * Description: Parses a buffer containing shell
- *		commands to find blocks (operations
- *		inside parentheses)
- * Return: An command structure
+ * Return: full path of cmd if found or NULL
  */
-struct cmd *parseblock(char **ps, char *es)
+char *find_path(info_t *info, char *pathstr, char *cmd)
 {
-	struct cmd *cmd;
+	int i = 0, curr_pos = 0;
+	char *path;
 
-	cmd = parsepipe(ps, es);
-
-	if (!peek(ps, es, "("))
+	if (!pathstr)
+		return (NULL);
+	if ((_strlen(cmd) > 2) && starts_with(cmd, "./"))
 	{
-		error("Failed to find block");
-		exit(1);
+		if (is_cmd(info, cmd))
+			return (cmd);
 	}
-
-	gettoken(ps, es, 0, 0);
-	cmd = parseline(ps, es);
-
-	if (!peek(ps, es, ")"))
+	while (1)
 	{
-		error("Syntax error - Missing )");
-		exit(1);
-	}
-
-	gettoken(ps, es, 0, 0);
-	cmd = parseredirs(cmd, ps, es);
-
-	return (cmd);
-}
-
-/**
- * parseredirs - Custom Function
- * @cmd: A command to redir
- * @ps: pointer to the string
- * @es: pointer to somewhere in the buffer
- *
- * Description: Parses a buffer containing shell
- *		commands to find blocks (operations
- *		inside parentheses)
- * Return: An command structure
- */
-struct cmd *parseredirs(struct cmd *cmd, char **ps, char *es)
-{
-	int tok;
-	char *q, *eq;
-
-	while (peek(ps, es, "<>"))
-	{
-		tok = gettoken(ps, es, 0, 0);
-
-		if (gettoken(ps, es, &q, &eq) != 'a')
+		if (!pathstr[i] || pathstr[i] == ':')
 		{
-			error("./shell");
-			exit(1);
-		}
-
-		switch (tok)
-		{
-			case '<':
-				cmd = redircmd(cmd, q, eq, O_RDONLY, 0);
+			path = dup_chars(pathstr, curr_pos, i);
+			if (!*path)
+				_strcat(path, cmd);
+			else
+			{
+				_strcat(path, "/");
+				_strcat(path, cmd);
+			}
+			if (is_cmd(info, path))
+				return (path);
+			if (!pathstr[i])
 				break;
-			case '>':
-				cmd = redircmd(cmd, q, eq, O_WRONLY | O_CREAT | O_TRUNC, 1);
-				break;
-			case '+':
-				cmd = redircmd(cmd, q, eq, O_WRONLY | O_CREAT, 1);
-				break;
+			curr_pos = i;
 		}
+		i++;
 	}
-
-	return (cmd);
+	return (NULL);
 }
-
-/**
- * parseexec - Custom Function
- * @ps: pointer to the string
- * @es: pointer to somewhere in the buffer
- *
- * Description: Parses a buffer containing shell
- *		commands to find executable
- *		command
- * Return: An command structure
- */
-struct cmd *parseexec(char **ps, char *es)
-{
-	struct cmd *ret;
-	struct execcmd *cmd;
-	char *q, *eq;
-	int tok, argc;
-
-	if (peek(ps, es, "("))
-		return (parseblock(ps, es));
-
-	ret = execcmd();
-	cmd = (struct execcmd *)ret;
-
-	argc = 0, ret = parseredirs(ret, ps, es);
-
-	while (!peek(ps, es, "|);"))
-	{
-		tok = gettoken(ps, es, &q, &eq);
-
-		if (tok == 0)
-			break;
-
-		if (tok != 'a')
-		{
-			error("Syntax error");
-			exit(1);
-		}
-
-		cmd->argv[argc] = q, cmd->eargv[argc] = eq, argc++;
-
-		/*if (argc >= MAXARGS)
-		{
-			error("./shell");
-			exit(1);
-		}*/
-
-		ret = parseredirs(ret, ps, es);
-	}
-
-	cmd->argv[argc] = 0, cmd->eargv[argc] = 0;
-
-	return (ret);
-}
-
